@@ -21,7 +21,7 @@
         "prepare": "npm run build"
     },
     "dependencies": {
-        "solc-typed-ast": "^18.2.2",
+        "solc-typed-ast": "^18.2.4",
         "sol-fuzz": "git+ssh://github.com/Consensys/sol-fuzz.git",
         "commander": "^12.1.0"
     },
