@@ -27,46 +27,67 @@ import {
     LatestCompilerVersion,
     PrettyFormatter,
     SourceUnit,
-    ContractDefinition
+    InferType,
+    IntType,
+    TypeNode
 } from "solc-typed-ast";
 import { compile as compileEOF, version as eofVersion } from "../eof";
 import { EVMLog, EVMStorage, runEVM } from "../evmc";
 import nodeAssert from "node:assert/strict";
+import random from "crypto-random-bigint";
+import { encodeFunctionCall } from "web3-eth-abi";
 
 const pkg = require("../../package.json");
 
-function extractInputAndBytecode(
+function extractBytecode(
     contracts: any,
     version: string,
     contractName: string,
-    testCallFunction: string
-): {
-    methodIdentifier?: string;
-    bytecode?: string;
-} {
+): string {
     if (version == "eof") {
-        const contract = contracts[Object.keys(contracts)[0]];
-        const methodSig = Object.keys(contract.hashes).find((m) => m.startsWith(testCallFunction));
-        if (methodSig === undefined) {
-            console.error(`Method ${testCallFunction} not found in contract ${contractName}`);
-            return { methodIdentifier: undefined, bytecode: undefined };
+        return contracts[Object.keys(contracts)[0]].bin;
+    }
+    return contracts["foo.sol"][contractName].evm.bytecode.object;
+}
+
+function generateRandomValue(typeNode: TypeNode): any {
+    if (typeNode instanceof IntType) {
+        if (typeNode.signed) {
+            const sign = random(1) === 1n;
+            if (sign) {
+                return random(typeNode.nBits - 1) * -1n;
+            }
+            return random(typeNode.nBits - 1);
+        } else {
+            return random(typeNode.nBits);
         }
-        const methodIdentifier = contract.hashes[methodSig];
-        const bytecode = contract.bin;
-        return { methodIdentifier, bytecode };
+    }
+    return undefined;
+}
+
+function prepareFunctionCall(unit: SourceUnit, testCallFunction: string, version: string): string {
+    const testFunction = unit.vContracts[0].vFunctions.find((f) => f.name === testCallFunction);
+    if (testFunction === undefined) {
+        throw new Error(`Function ${testCallFunction} not found in contract`);
+    }
+    const type = new InferType(version);
+    const params = [];
+    for (const param of testFunction.vParameters.vParameters) {
+        const typeNode = type.variableDeclarationToTypeNode(param);
+        const value = generateRandomValue(typeNode);
+        if (value !== undefined) {
+            params.push(value);
+        }
     }
 
-    const methodSig = Object.keys(contracts["foo.sol"][contractName].evm.methodIdentifiers).find(
-        (m) => m.startsWith(testCallFunction)
-    );
-    if (methodSig === undefined) {
-        console.error(`Method ${testCallFunction} not found in contract ${contractName}`);
-        return { methodIdentifier: undefined, bytecode: undefined };
-    }
-    const methodIdentifier = contracts["foo.sol"][contractName].evm.methodIdentifiers[methodSig];
-    const bytecode = contracts["foo.sol"][contractName].evm.bytecode.object;
-
-    return { methodIdentifier, bytecode };
+    return encodeFunctionCall({
+        name: testCallFunction,
+        type: "function",
+        inputs: testFunction.vParameters.vParameters.map((p) => ({
+            name: p.name,
+            type: p.vType?.typeString ?? ""
+        })),
+    }, params);
 }
 
 function write(s: SourceUnit, version: string): string {
@@ -269,11 +290,13 @@ async function main() {
         const logsPerVersion: Array<EVMLog[] | undefined> = versions.map(() => undefined);
         const runResultPerVersion: Array<"success" | "revert" | "n/a"> = versions.map(() => "n/a");
 
-        const contractName = unit.children.find((el) => el instanceof ContractDefinition)?.name;
+        const contractName = unit.vContracts[0].name;
 
         let versionIndex = 0;
         for (const version of versions) {
-            const variantStr = write(variant, version == "eof" ? await eofVersion() : version);
+            const compilerVersion = version == "eof" ? await eofVersion() : version;
+            const variantStr = write(variant, compilerVersion);
+            const functionCall = prepareFunctionCall(unit, testCallFunction, compilerVersion);
             try {
                 const compilationResult = await compile(variantStr, version);
                 numSuccess++;
@@ -283,14 +306,13 @@ async function main() {
                 }
 
                 if (contractName !== undefined && testCallFunction !== undefined) {
-                    const { methodIdentifier, bytecode } = extractInputAndBytecode(
+                    const bytecode = extractBytecode(
                         compilationResult.data.contracts,
                         version,
-                        contractName,
-                        testCallFunction
+                        contractName
                     );
 
-                    if (methodIdentifier === undefined || bytecode === undefined) {
+                    if (bytecode === undefined) {
                         continue;
                     }
 
@@ -301,7 +323,7 @@ async function main() {
 
                     const { storage, logs, result } = await runEVM({
                         bytecode,
-                        input: methodIdentifier,
+                        input: functionCall,
                         verbosity,
                         revision
                     });
