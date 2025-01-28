@@ -4,12 +4,12 @@ import fse from "fs-extra";
 import {
     applyNRandomRewrites,
     BaseRule,
+    Diversity,
     GenEnv,
     GenRule,
     makeRewrite,
     parseRules,
     pickAny,
-    Rewrite,
     RewriteRule,
     SyntaxError
 } from "sol-fuzz";
@@ -122,7 +122,9 @@ async function main() {
         return;
     }
 
-    const rewrites: Rewrite[] = rewriteRules.map((r) => makeRewrite(r, env));
+    const rand = new Diversity();
+
+    const rewrites = rewriteRules.map((r) => makeRewrite(r, env, rand));
 
     const compilerVersion: string = versions[0];
 
@@ -181,7 +183,7 @@ async function main() {
 
     for (let i = 0; i < numTests; i++) {
         const unit = pickAny(seedUnits);
-        const variant = applyNRandomRewrites(unit, rewrites, rewriteDepth);
+        const variant = applyNRandomRewrites(unit, rewrites, rewriteDepth, rand);
 
         if (verbosity >= 2) {
             console.log("==================================================================");
