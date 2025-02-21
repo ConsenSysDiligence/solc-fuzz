@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import path from "path";
 import os from "os";
 import fs from "fs/promises";
+import logger from "./logging";
 
 export type EVMLog = {
     address: string;
@@ -12,7 +13,7 @@ export type EVMLog = {
 export type EVMStorage = Record<string, any>;
 
 export type Result = {
-    result: "success" | "revert";
+    result: "success" | "revert" | "out of gas" | "no-op";
     output: string;
 };
 
@@ -26,22 +27,25 @@ export type RunEVMResult = {
 const EVM_PATH = process.env.EVM_PATH || "evmone.so";
 const EVMC_PATH = process.env.EVMC_PATH || "evmc";
 
+const OUTPUT_REGEX = /Output:([ \w]+)/;
+const RESULT_REGEX = /Result:([ \w]+)/;
+
 export async function runEVM({
     bytecode,
     input,
     revision = 14,
-    vmPath = EVM_PATH,
-    verbosity = 0
+    vmPath = EVM_PATH
 }: {
     bytecode: string;
     input: string;
     revision?: number;
     vmPath?: string;
-    verbosity?: number;
 }): Promise<RunEVMResult> {
     // create temp files for storage and logs
     const storageTempFile = path.join(os.tmpdir(), "storage.json");
     const logsTempFile = path.join(os.tmpdir(), "logs.json");
+
+    logger.debug(`Running EVM for revision ${revision}`);
 
     const child = spawn(EVMC_PATH, [
         "run",
@@ -75,22 +79,38 @@ export async function runEVM({
                 try {
                     const storage = JSON.parse(await fs.readFile(storageTempFile, "utf8"));
                     const logs = JSON.parse(await fs.readFile(logsTempFile, "utf8"));
-                    if (verbosity >= 2) {
-                        console.log(`EVM OUTPUT: ${stdout}`);
+                    logger.debug(`EVM output: ${stdout}`);
+
+                    let runResult: "success" | "revert" | "out of gas";
+                    const r = stdout.match(RESULT_REGEX);
+                    if (r !== null) {
+                        runResult = r[1].trim() as "success" | "revert" | "out of gas";
+                    } else {
+                        logger.error(`Error parsing EVM result status`);
+                        reject(stdout);
+                        return;
                     }
-                    const lines = stdout.split("\n");
+
+                    let output = "";
+                    const o = stdout.match(OUTPUT_REGEX);
+                    if (o !== null) {
+                        output = o[1].trim();
+                    }
+
                     const result = {
-                        result: lines[lines.length - 4].split(":")[1].trim() as
-                            | "success"
-                            | "revert",
-                        output: lines[lines.length - 2].split(":")[1].trim()
+                        result: runResult,
+                        output
                     };
                     resolve({ storage, logs, result });
                 } catch (e) {
+                    logger.error(`Error parsing EVM output: ${e}`);
                     reject(e);
+                    return;
                 }
             } else {
+                logger.debug(`EVM error: ${stderr}`);
                 reject(stderr);
+                return;
             }
             await fs.rm(storageTempFile);
             await fs.rm(logsTempFile);
