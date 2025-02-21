@@ -1,4 +1,4 @@
-FROM node:20-bookworm AS base
+FROM node:22-bookworm AS base
 
 WORKDIR /app
 
@@ -23,11 +23,12 @@ COPY package.json package-lock.json ./
 
 RUN --mount=type=ssh npm install --ignore-scripts
 
-FROM node:20-bookworm-slim AS final
+FROM node:22-bookworm-slim AS final
 
 RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 && rm -rf /var/lib/apt/lists/*
 
 ENV SOLC_WRAPPER_PATH=/app/solc_wrapper.sh
+ENV SOLC_VERSION_WRAPPER_PATH=/app/solc_version_wrapper.sh
 ENV SOLC_PATH=/usr/bin/solc
 ENV EVM_PATH=/usr/lib/libevmone.so.0.13.0
 ENV EVMC_PATH=/usr/bin/evmc
@@ -48,6 +49,9 @@ COPY --from=base /app/lib/libevmone.so.0.13.0 /usr/lib/libevmone.so.0.13.0
 
 COPY . .
 
-RUN npm link
+RUN npm run build
 
-CMD ["node", "src/bin/solc-fuzz.ts"]
+ENV LOG_PRETTY=true
+ENV LOG_LEVEL=debug
+
+ENTRYPOINT ["node", "/app/dist/bin/solc-fuzz.js"]
