@@ -267,7 +267,7 @@ async function main() {
     }
 
     console.log(
-        `Tests compiled: ${numSuccess} tests with compiler error: ${numCompileError} tests with other error/crash: ${numCrash}`
+        `Total successful compilations: ${numSuccess} total failing compilations: ${numCompileError} total crashes: ${numCrash}`
     );
 }
 
