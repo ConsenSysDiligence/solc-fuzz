@@ -1,5 +1,12 @@
 import random from "crypto-random-bigint";
-import { InferType, IntType, SourceUnit, TypeNode, FunctionDefinition } from "solc-typed-ast";
+import {
+    InferType,
+    IntType,
+    SourceUnit,
+    TypeNode,
+    FunctionDefinition,
+    assert
+} from "solc-typed-ast";
 import { encodeFunctionCall } from "web3-eth-abi";
 import { runEVM, RunEVMResult } from "./evmc";
 
@@ -38,10 +45,9 @@ export class Fuzzer {
         for (const param of this.testFunction.vParameters.vParameters) {
             const typeNode = type.variableDeclarationToTypeNode(param);
             const value = this.generateRandomValue(typeNode);
-            if (value !== undefined) {
-                // assert the value is defined
-                params.push(value);
-            }
+            assert(value !== undefined, `Missing random value for {0}`, typeNode);
+            // assert the value is defined
+            params.push(value);
         }
         return params;
     }

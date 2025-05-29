@@ -92,7 +92,7 @@ async function write(s: SourceUnit, version: string): Promise<string> {
     const writer = new ASTWriter(
         DefaultASTWriterMapping,
         new PrettyFormatter(4, 0),
-        await resolveCompilerVersion(version),
+        await resolveCompilerVersion(version)
     );
     return writer.write(s);
 }

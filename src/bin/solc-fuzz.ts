@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import { SourceUnit } from "solc-typed-ast";
 import { NoOpError, Config, prepareConfig } from "../config";
-import { run } from "../runner";
+import { ResultRow, run } from "../runner";
 import { exists } from "../utils";
 import { prepareSeedUnits, Result as CompilationResult } from "../compile";
 import { FuzzingResult } from "../fuzzer";
@@ -36,42 +36,52 @@ async function prepareOutputPath(outputPath: string): Promise<string> {
     return outputPath;
 }
 
+interface CompilationJSON {
+    error: string;
+    version: string;
+}
+
+interface JSONResult {
+    fileName: string;
+    contractName: string;
+    results: Array<CompilationJSON | FuzzingResult>;
+}
+
 async function processResults(
     outputStream: fs.WriteStream,
-    compilationFailures: Array<[string, CompilationResult]>,
-    fuzzingFailures: Array<[string, string, FuzzingResult]>
-) {
-    logger.debug(`Writing ${compilationFailures.length} compilation failures`);
-    for (const [fileName, compilationResult] of compilationFailures) {
-        await writeToStream(
-            outputStream,
-            JSON.stringify({
-                failure: "compilation:error",
-                contractPath: fileName,
-                error: compilationResult.error as string,
-                version: compilationResult.version
-            }) + "\n"
-        );
+    inconsistentRows: Array<[string, string, ResultRow]>
+): Promise<[number, number]> {
+    let numCompileFails = 0,
+        numFuzzMismatches = 0;
+
+    for (const [fileName, contractName, row] of inconsistentRows) {
+        const json: JSONResult = {
+            fileName,
+            contractName,
+            results: []
+        };
+
+        for (const result of row) {
+            if (result instanceof CompilationResult) {
+                numCompileFails++;
+                const error = !result.success
+                    ? (result.error as string)
+                    : `No bytecode for ${contractName}`;
+
+                json.results.push({
+                    error,
+                    version: result.version
+                });
+            } else {
+                numFuzzMismatches++;
+                json.results.push(result);
+            }
+        }
+
+        await writeToStream(outputStream, JSON.stringify(json) + "\n");
     }
 
-    logger.debug(`Writing ${fuzzingFailures.length} fuzzing failures`);
-    for (const [reason, fileName, fuzzingResult] of fuzzingFailures) {
-        await writeToStream(
-            outputStream,
-            JSON.stringify({
-                failure: `fuzzing:${reason}`,
-                contractPath: fileName,
-                encodedCall: fuzzingResult.encodedCall,
-                callParameters: fuzzingResult.callParameters,
-                functionName: fuzzingResult.functionName,
-                version: fuzzingResult.version,
-                result: fuzzingResult.runResult.result.result,
-                output: fuzzingResult.runResult.result.output,
-                storage: fuzzingResult.runResult.storage,
-                logs: fuzzingResult.runResult.logs
-            }) + "\n"
-        );
-    }
+    return [numCompileFails, numFuzzMismatches];
 }
 
 async function main() {
@@ -95,7 +105,7 @@ async function main() {
     const outputPath = await prepareOutputPath(config.outputPath);
 
     // open file for streaming write
-    const resultsFile = fs.createWriteStream(path.join(outputPath, "results.jsonl"));
+    const resultsFile = fs.createWriteStream(path.join(outputPath, "results.json"));
     const resultsProcessor = processResults.bind(null, resultsFile);
 
     let numberOfTestsPerformed = 0;
@@ -104,7 +114,7 @@ async function main() {
 
     if (config.timeLimit !== undefined) {
         while (Date.now() - startTime < config.timeLimit) {
-            const { compilationFailures, fuzzingFailures } = await run({
+            const inconsistentRows = await run({
                 seedUnits,
                 rewrites: config.rewrites,
                 rewriteDepth: config.rewriteDepth,
@@ -117,15 +127,15 @@ async function main() {
                 baseFileName: path.basename(config.files[0]),
                 outputPath
             });
-            await resultsProcessor(compilationFailures, fuzzingFailures);
+            const [cf, ff] = await resultsProcessor(inconsistentRows);
             numberOfTestsPerformed++;
-            compilationFailuresEncountered += compilationFailures.length;
-            fuzzingFailuresEncountered += fuzzingFailures.length;
+            compilationFailuresEncountered += cf;
+            fuzzingFailuresEncountered += ff;
         }
         console.log(`Time limit of ${config.timeLimit}ms reached. Exiting...`);
         process.exit(0);
     } else {
-        const { compilationFailures, fuzzingFailures } = await run({
+        const inconsistentRows = await run({
             seedUnits,
             rewrites: config.rewrites,
             rewriteDepth: config.rewriteDepth,
@@ -137,10 +147,10 @@ async function main() {
             baseFileName: path.basename(config.files[0]),
             outputPath
         });
-        await resultsProcessor(compilationFailures, fuzzingFailures);
+        const [cf, ff] = await resultsProcessor(inconsistentRows);
         numberOfTestsPerformed += config.numTests;
-        compilationFailuresEncountered += compilationFailures.length;
-        fuzzingFailuresEncountered += fuzzingFailures.length;
+        compilationFailuresEncountered += cf;
+        fuzzingFailuresEncountered += ff;
     }
 
     console.log(`Performed ${numberOfTestsPerformed} tests`);

@@ -26,7 +26,7 @@
         "pino": "^9.6.0",
         "pino-pretty": "^13.0.0",
         "sol-fuzz": "git+ssh://github.com/Consensys/sol-fuzz.git",
-        "solc-typed-ast": "^18.2.4",
+        "solc-typed-ast": "^18.2.5",
         "web3-eth-abi": "^4.4.1"
     },
     "devDependencies": {

@@ -97,7 +97,7 @@ export async function prepareConfig(): Promise<Config> {
         versions.push("eof");
     }
 
-    if (options.testEof && options.testCallFunction === undefined) {
+    if (options.testCallFunction === undefined) {
         console.error(`No test call function specified. Exiting...`);
         throw new NoOpError("No test call function specified");
     }

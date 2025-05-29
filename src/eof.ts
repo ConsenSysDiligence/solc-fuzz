@@ -12,7 +12,7 @@ const SOLC_VERSION_WRAPPER_PATH =
 
 const DEFAULT_COMPILER_VERSION = "0.8.27";
 
-let __compilerVersion__: Record<string, string> = {};
+const __compilerVersion__: Record<string, string> = {};
 
 export async function compile(sourceCode: string): Promise<CompileResult> {
     // write source code to temp file

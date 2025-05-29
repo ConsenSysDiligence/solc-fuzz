@@ -4,9 +4,7 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y libboost-all-dev cmake git openssh-client clang-19 make libz3-dev
 
-RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
-
-RUN --mount=type=ssh git clone git@github.com:ConsenSysDiligence/evmc-eof.git \
+RUN git clone https://github.com/ConsenSysDiligence/evmc-eof.git \
     && cd evmc-eof \
     && cmake . -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=/app/evmc-eof/cmake/cable/toolchains/cxx17.cmake -DEVMC_TESTING=ON -B build \
     && cmake --build build -- -j4
