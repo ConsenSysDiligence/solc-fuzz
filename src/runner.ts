@@ -1,7 +1,7 @@
 import { SourceUnit } from "solc-typed-ast";
 import { compile, Result as CompilationResult, unitToSourceCode } from "./compile";
 import { Fuzzer, FuzzingResult } from "./fuzzer";
-import { applyNRandomRewrites, pickAny, Rewrite } from "sol-fuzz";
+import { applyNRandomRewrites, pickAny, Randomness, Rewrite } from "sol-fuzz";
 import { deepStrictEqual } from "node:assert";
 import logger from "./logging";
 import { writeFile } from "node:fs/promises";
@@ -27,26 +27,21 @@ async function saveVariant(variantFileName: string, variant: SourceUnit, version
     }
 }
 
-function resultEq(
-    r1: CompilationResult | FuzzingResult,
-    r2: CompilationResult | FuzzingResult
-): boolean {
+function resultEq(r1: CompilationResult | FuzzingResult, r2: CompilationResult | FuzzingResult): boolean {
     if (r1 instanceof CompilationResult && r2 instanceof CompilationResult) {
         return r1.success === r2.success;
     }
 
     if ("runResult" in r1 && "runResult" in r2) {
-        return (
-            r1.runResult.result.output === r2.runResult.result.output &&
+        return r1.runResult.result.output === r2.runResult.result.output &&
             deepEqual(r1.runResult.storage, r2.runResult.storage) &&
-            deepEqual(r1.runResult.logs, r2.runResult.logs)
-        );
+            deepEqual(r1.runResult.logs, r2.runResult.logs);
     }
 
     return false;
 }
 
-export type ResultRow = Array<CompilationResult | FuzzingResult>;
+export type ResultRow = (CompilationResult | FuzzingResult)[];
 
 export async function run({
     seedUnits,
@@ -57,7 +52,8 @@ export async function run({
     testCallFunctionName,
     saveVariants,
     baseFileName,
-    outputPath
+    outputPath,
+    randomness
 }: {
     seedUnits: SourceUnit[];
     rewrites: Rewrite[];
@@ -68,12 +64,13 @@ export async function run({
     saveVariants: boolean;
     baseFileName: string;
     outputPath: string;
-}): Promise<Array<[string, string, ResultRow]>> {
-    const inconsistentRows: Array<[string, string, ResultRow]> = [];
+    randomness: Randomness
+}): Promise<[string, string, ResultRow][]> {
+    const inconsistentRows: [string, string, ResultRow][]  = [];
 
     for (let i = 0; i < numberOfTests; i++) {
         const unit = pickAny(seedUnits);
-        const variant = applyNRandomRewrites(unit, rewrites, rewriteDepth);
+        const variant = applyNRandomRewrites(unit, rewrites, rewriteDepth, randomness);
         const variantFileName = path.join(outputPath, `${baseFileName}.variant.${i}.sol`);
         if (saveVariants) {
             await saveVariant(variantFileName, variant, versions[0]);

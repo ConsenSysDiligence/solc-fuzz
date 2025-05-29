@@ -125,7 +125,8 @@ async function main() {
                 testCallFunctionName: config.testCallFunction as string,
                 saveVariants: config.saveVariants,
                 baseFileName: path.basename(config.files[0]),
-                outputPath
+                outputPath,
+                randomness: config.randomness
             });
             const [cf, ff] = await resultsProcessor(inconsistentRows);
             numberOfTestsPerformed++;
@@ -145,7 +146,8 @@ async function main() {
             testCallFunctionName: config.testCallFunction as string,
             saveVariants: config.saveVariants,
             baseFileName: path.basename(config.files[0]),
-            outputPath
+            outputPath,
+            randomness: config.randomness
         });
         const [cf, ff] = await resultsProcessor(inconsistentRows);
         numberOfTestsPerformed += config.numTests;

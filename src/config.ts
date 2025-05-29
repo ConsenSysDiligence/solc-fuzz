@@ -1,10 +1,12 @@
 import { Command } from "commander";
 import {
     BaseRule,
+    Diversity,
     GenEnv,
     GenRule,
     makeRewrite,
     parseRules,
+    Randomness,
     Rewrite,
     RewriteRule,
     SyntaxError
@@ -36,6 +38,7 @@ export type Config = {
     rewrites: Rewrite[];
     outputPath: string;
     saveVariants: boolean;
+    randomness: Randomness
 };
 
 export async function prepareConfig(): Promise<Config> {
@@ -141,7 +144,8 @@ export async function prepareConfig(): Promise<Config> {
         throw new NoOpError("No re-write rules specified");
     }
 
-    const rewrites: Rewrite[] = rewriteRules.map((r) => makeRewrite(r, env));
+    const randomness = new Diversity();
+    const rewrites: Rewrite[] = rewriteRules.map((r) => makeRewrite(r, env, randomness));
 
     const compilerVersion: string = versions[0];
 
@@ -159,6 +163,7 @@ export async function prepareConfig(): Promise<Config> {
         compilerSettings,
         rewrites,
         outputPath: options.output,
-        saveVariants: options.save
+        saveVariants: options.save,
+        randomness
     };
 }
