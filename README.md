@@ -1,12 +1,11 @@
 # solc-fuzz
 
 A script for differential random testing of different Solidity compiler versions built on top of [sol-fizz][https://github.com/Consensys/sol-fuzz].
-The script generated a specified number of random variations of a seed program and runs a set of different Solidity compiler versions on all mutations, checking that they produce the same result.
-Currently the only supported outcomes are Successful Compilation, Compile Error, Crash.
+The script generated a specified number of random variations of a seed program and runs a set of different Solidity compiler versions on all mutations, checking that they produce the same result. For the versions for which compilation succeeds, we also try running the code, and compare the final state.
 
 ## Installation
 
-The tool requires a special hacked version of EVMC to compare storage after execution. For convenience we package it in a docker container and run it in there. To install from source run:
+The tool requires a tweaked version of EVMC to compare storage after execution. For convenience we package it in a docker container and run it in there. To install from source run:
 ```bash
 git clone https://github.com/Consensys/solc-fuzz
 cd solc-fuzz
@@ -51,7 +50,7 @@ Block([$a@..., $b@...], $doc@*) =>
     );
 ```
 
-The tool itself is ran as a docker container as follows:
+You can run the tool in a docker container as follows:
 
 ```bash
 docker run -t solc-fuzz -v ${PWD}:/data --compiler-versions 0.8.20  --num-tests 1 --rewrite-depth 10 /data/seed.sol --rewrites /data/arith.rewrites --test-call-function foo --output /data
@@ -68,3 +67,6 @@ Lets break down the options:
 - `--output /data` - path where to write results. Results are written in JSON format in a file `results.json`. 
 The result format is a sequence of JSON object. One object per test for which some compiler produced a differing result. For the failing test we output the result (compiler error or execution result) for all compiler versions.
 If you want to save the generated random files add the `--save` command line option.
+
+Additionally if you want to test the yet-unreleased EOF Object format, you can add the `--test-eof` version to also add that as a test version.
+Finally if you want to see all the generated solidity samples add the `--save` option.
