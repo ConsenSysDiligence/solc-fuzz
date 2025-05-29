@@ -6,10 +6,13 @@ Currently the only supported outcomes are Successful Compilation, Compile Error,
 
 ## Installation
 
-Package could be installed globally via following command:
-
+The tool requires a special hacked version of EVMC to compare storage after execution. For convenience we package it in a docker container and run it in there. To install from source run:
 ```bash
-npm install -g https://github.com/Consensys/solc-fuzz
+git clone https://github.com/Consensys/solc-fuzz
+cd solc-fuzz
+npm install
+npm run build
+docker build . -t solc-fuzz
 ```
 
 ## Usage
@@ -48,33 +51,20 @@ Block([$a@..., $b@...], $doc@*) =>
     );
 ```
 
-You can use `solc-fuzz` to automatically generate 100 random samples, each utilizing up to 20 rewrites, and compare the result of compiler version 0.8.0 and 0.8.28 on them as follows:
+The tool itself is ran as a docker container as follows:
 
 ```bash
-solc-fuzz seed.sol --rewrites arith.rewrites --num-tests 100 --rewrite-depth 20
+docker run -t solc-fuzz -v ${PWD}:/data --compiler-versions 0.8.20  --num-tests 1 --rewrite-depth 10 /data/seed.sol --rewrites /data/arith.rewrites --test-call-function foo --output /data
 ```
 
-The output will look something like this:
+Lets break down the options:
 
-```
-Test #, 0.8.0, 0.8.28
-0, ERRORS, OK     
-1, ERRORS, ERRORS
-2, ERRORS, ERRORS
-3, OK, OK     
-....
-95, OK, OK
-96, ERRORS, OK
-97, ERRORS, OK
-98, ERRORS, OK
-99, OK, OK
-WARNING: For test 0 compilers 0.8.0 and 0.8.28 differ - ERRORS and OK respectively.
-...
-WARNING: For test 98 compilers 0.8.0 and 0.8.28 differ - ERRORS and OK respectively.
-Total successful compilations: 80 total failing compilations: 120 total crashes: 0
-```
-
-The output first list in CSV format the result for each test it executed. For every compiler version it will output either ERRORS (compiler errors), OK (compiled successfully) or CRASH.
-Afterwards, if the behavior differed for any tests it will output a warning. Finally it will print out short statistics about the compilations.
-
+- `-v ${PWD}:/data` - this mounts the current directory as `/data` in the container. This allows us to access the seed file and re-writes in the container, and also to get the tool output
+- `--num-tests 1` - how many test variants to generate
+- `--rewrite-depth 10` - how many random rewrites to apply to get a new random variant
+- `/data/seed.sol` - path to the seed file. Note that since this is in the container, we used the mount path `/data` specified earlier
+- `--rewrites /data/arith.rewrites` - path to the rewrites file (again in the container)
+- `--test-call-function foo` - path to a public function to try executing. If compilation succeeds, we will try to run the code for different compiler versions and compare the resulting state
+- `--output /data` - path where to write results. Results are written in JSON format in a file `results.json`. 
+The result format is a sequence of JSON object. One object per test for which some compiler produced a differing result. For the failing test we output the result (compiler error or execution result) for all compiler versions.
 If you want to save the generated random files add the `--save` command line option.
